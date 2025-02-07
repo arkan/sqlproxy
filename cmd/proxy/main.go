@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/binary"
 	"flag"
+	"fmt"
 	"io"
 	"log"
 	"net"
@@ -15,21 +16,25 @@ import (
 
 const listenAddr = ":8888"
 
+// Query request struct.
 type QueryRequest struct {
 	Query string        `msgpack:"query"`
 	Args  []interface{} `msgpack:"args"`
 }
 
+// Query response struct.
 type QueryResponse struct {
 	Columns []string        `msgpack:"columns"`
 	Data    [][]interface{} `msgpack:"data"`
 }
 
+// Exec request struct.
 type ExecRequest struct {
 	Query string        `msgpack:"query"`
 	Args  []interface{} `msgpack:"args"`
 }
 
+// Exec response struct.
 type ExecResponse struct {
 	RowsAffected int64 `msgpack:"rows_affected"`
 	LastInsertID int64 `msgpack:"last_insert_id"`
@@ -91,9 +96,13 @@ func handleConnection(conn net.Conn, db *sql.DB) {
 		}
 
 		if isQuery(requestData) {
-			handleQuery(conn, db, requestData)
+			if err := handleQuery(conn, db, requestData); err != nil {
+				return
+			}
 		} else {
-			handleExec(conn, db, requestData)
+			if err := handleExec(conn, db, requestData); err != nil {
+				return
+			}
 		}
 	}
 }
@@ -103,16 +112,25 @@ func isQuery(data []byte) bool {
 	return msgpack.Unmarshal(data, &temp) == nil
 }
 
-func handleQuery(conn net.Conn, db *sql.DB, data []byte) {
+func handleQuery(conn net.Conn, db *sql.DB, data []byte) error {
 	var req QueryRequest
-	msgpack.Unmarshal(data, &req)
+	if err := msgpack.Unmarshal(data, &req); err != nil {
+		return err
+	}
 
-	log.Printf("handleQuery: %s - %v", req.Query, req.Args)
+	fmt.Printf("handleQuery: %s - %v\n", req.Query, req.Args)
 
-	rows, _ := db.Query(req.Query, req.Args...)
+	rows, err := db.Query(req.Query, req.Args...)
+	if err != nil {
+		return err
+	}
 	defer rows.Close()
 
-	cols, _ := rows.Columns()
+	cols, err := rows.Columns()
+	if err != nil {
+		return err
+	}
+
 	var results [][]interface{}
 
 	for rows.Next() {
@@ -126,25 +144,36 @@ func handleQuery(conn net.Conn, db *sql.DB, data []byte) {
 	}
 
 	sendResponse(conn, QueryResponse{Columns: cols, Data: results})
+
+	return nil
 }
 
-func handleExec(conn net.Conn, db *sql.DB, data []byte) {
+func handleExec(conn net.Conn, db *sql.DB, data []byte) error {
 	var req ExecRequest
-	msgpack.Unmarshal(data, &req)
+	if err := msgpack.Unmarshal(data, &req); err != nil {
+		return err
+	}
 
-	log.Printf("handleExec: %s - %v", req.Query, req.Args)
+	fmt.Printf("handleExec: %s - %v\n", req.Query, req.Args)
 
-	result, _ := db.Exec(req.Query, req.Args...)
+	result, err := db.Exec(req.Query, req.Args...)
+	if err != nil {
+		return err
+	}
+
+	// Get the number of rows affected and the last inserted ID.
+	// We don't care about the errors, because some databases don't support it.
 	rows, _ := result.RowsAffected()
 	lastID, _ := result.LastInsertId()
 
 	sendResponse(conn, ExecResponse{RowsAffected: rows, LastInsertID: lastID})
+
+	return nil
 }
 
 func sendResponse(conn net.Conn, response interface{}) {
 	data, err := msgpack.Marshal(response)
 	if err != nil {
-		log.Println("msgpack marshal error:", err)
 		return
 	}
 
