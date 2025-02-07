@@ -16,15 +16,15 @@ I encountered an issue where my required ODBC driver only supports 32-bit Window
 Run queryservice
 
 ```
-go run queryservice/main.go
+go run proxy/main.go
 ```
 
 Use customdriver in Your Go Code
 
 ```
-go run queryservice/main.go
+go run proxy/main.go
 ```
-Use customdriver in Your Go Code
+Use sqlproxy in Your Go Code
 
 ```
 import (
