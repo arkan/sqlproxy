@@ -13,7 +13,7 @@ import (
 
 // Register driver
 func init() {
-	sql.Register("tcpproxy", &Driver{})
+	sql.Register("sqlproxy", &Driver{})
 }
 
 // Driver implementation
