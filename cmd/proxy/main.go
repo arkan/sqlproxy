@@ -109,7 +109,17 @@ func handleConnection(conn net.Conn, db *sql.DB) {
 
 func isQuery(data []byte) bool {
 	var temp QueryRequest
-	return msgpack.Unmarshal(data, &temp) == nil
+	if err := msgpack.Unmarshal(data, &temp); err != nil {
+		return false
+	}
+	// Remove whitespace from the query.
+	query := strings.TrimSpace(temp.Query)
+
+	// Extract the first word of the query (ignoring case).
+	firstWord := strings.ToUpper(strings.Fields(query)[0])
+
+	// Check if it starts with SELECT (indicating a query).
+	return firstWord == "SELECT"
 }
 
 func handleQuery(conn net.Conn, db *sql.DB, data []byte) error {
